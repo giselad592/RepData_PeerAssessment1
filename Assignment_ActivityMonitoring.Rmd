@@ -1,0 +1,204 @@
+---
+title: "Activity Monitoring Report"
+author: "Gisela"
+date: "7/17/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Reproducible Research Assignment
+
+The goal of this report is to answer que questions posed in the course assignment.
+
+### 1) Code for reading in the dataset and/or processing the data
+
+We will start by loading the data into R and taking a look at it.
+
+```{r data, echo = TRUE }
+data <- read.csv("activity.csv", na.strings = "NA" )
+ str(data)
+```
+
+We will also load the package dplyr to help us manipulate the data and ggplot2 for generating plots.
+
+```{r, message = FALSE}
+library(dplyr)
+library (ggplot2)
+```
+
+### 2) Histogram of the total number of steps taken each day
+
+For this part of the assignment we will ignore the missing values.
+
+```{r na.rm.data, echo = TRUE }
+na.rm.data <- na.omit(data)
+```
+
+We will start by calculating how many steps are taken per day.
+
+```{r steps by day, echo = TRUE}
+by_date <- tapply(na.rm.data$steps, na.rm.data$date, sum)
+head(by_date)
+```
+
+Next we will create a histogram.
+
+```{r histogram, echo = TRUE}
+barplot(by_date, xlab = "Date", ylab = " Number of Steps", main = "Number of Steps per Day")
+```
+
+### 3) Mean and median number of steps taken each day
+
+We calculate the mean and median of the total number of steps that were taken each day within the time frame.
+
+```{r mean median}
+mean <- round(mean(by_date, na.rm = TRUE))
+mean
+median <- median(by_date, na.rm = TRUE)
+median
+```
+
+### 4) Time series plot of the average number of steps taken
+
+We will start by grouping the data by the 5-minute intervals and taking the average across dates.
+
+```{r by_interval}
+by_interval <- na.rm.data %>% group_by(interval) %>% mutate(average = mean(steps))
+```
+
+Here is the corresponding plot:
+
+```{r plot}
+plot(by_interval$interval, by_interval$average, type = "l", main = "Time Series Plot", xlab = "5-minute Interval", ylab = "Number of Steps")
+```
+
+### 5) The 5-minute interval that, on average, contains the maximum number of steps
+
+```{r max}
+max <- max(by_interval$average)
+int <- filter(by_interval, average == max)
+head(int)
+interval <- int[1,3] 
+```
+
+We can see that the interval that corresponds to the maximum is `r interval`. We can also confirm "visually" by looking at the previous plot that these coordinates make sense. 
+
+### 6) Code to describe and show a strategy for imputing missing data
+
+Now we will go back to our original dataset, without omiting the missing data. We start by counting the number of missing values. To do that we simply check the difference in the number of rows between the two datasets.
+
+```{r NAs}
+missing <- nrow(data) - nrow(na.rm.data)
+missing
+```
+
+So there are `r missing` missing values.
+
+We will imput the missing data by subsituting NA for the average number of steps (across dates) in that particular 5-minute interval. We have already calculated those averages while answering the previous questions. 
+
+```{r function}
+my_function <- function (x) {
+        v <- NULL
+        for (i in 1:nrow(x)) {
+                if (is.na(x[i,1]) == TRUE) {
+                        it <- x[i,3]
+                        av <- subset(by_interval, interval == it, select = average)[1,1]
+                        v <- c(v, av)
+                } else {
+                v <- c(v, x[i,1])
+                }
+        }
+        x %>% mutate(steps = v)
+}
+```
+
+We created a function that loops over the column "steps" and substitutes NAs for the average number of steps in that particular interval. If it is not an NA than it maintains the original value. 
+
+Now we will apply this function to our dataset.
+
+```{r new_data}
+new_data <- my_function(data)
+head(new_data)
+head(data)
+head(by_interval)
+```
+
+We can see that NAs have been appropriately subsituted.
+
+We can check that when they were not NA they remained the same in some random rows:
+
+```{r}
+data[1000:1005,]
+new_data[1000:1005,]
+```
+
+### 7) Histogram of the total number of steps taken each day after missing values are imputed
+
+We will repeat what we did on Question 2, using instead the dataset obtained on Question 6.
+
+```{r steps, echo = TRUE}
+new_data$steps <- as.numeric(new_data$steps)
+new_by_date <- tapply(new_data$steps, new_data$date, sum)
+head(new_by_date)
+```
+
+Here is the new histogram
+
+```{r new_histogram, echo = TRUE}
+barplot(new_by_date, xlab = "Date", ylab = " Number of Steps", main = "Number of Steps per Day (imputting missing values")
+```
+
+Now we will calculate the mean and median:
+
+```{r }
+new_mean <- mean(new_by_date)
+new_mean
+new_median <- median(new_by_date)
+new_median
+```
+
+As we can see, the mean obtained from the dataset with NAs removed was `r mean` which is almost the same as the "new" mean obtained by imputing values for NAs, `r new_mean`. Same happens with the median, the median obtained without NAs was `r median` also very close to the "new" median, `r new_median`. Therefore we may conclude that imputing values for missing data, such as was done here does not impact the estimates for total number of steps per day. 
+
+### 8) Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends.
+
+We will use the dataset that we created with the missing values imputted above. Let us calculate the average steps across dates.
+
+```{r averages}
+final <- new_data %>% mutate(steps = as.numeric(steps)) %>% group_by(interval) %>% mutate(average = mean(steps))
+head(final)
+```
+
+We will turn the date variable into class Date.
+
+```{r}
+final$date = as.Date(final$date)
+```
+
+Next, we create a variable called "week", that identifies which day of the week it is. 
+
+```{r}
+final$week <- sapply(final$date, weekdays)
+```
+
+We only want to know if it is a weekday or weekend, so we will simply change the names. 
+
+```{r}
+final$week <- gsub("Monday", "Weekday", final$week)
+final$week <- gsub("Tuesday", "Weekday", final$week)
+final$week <- gsub("Wednesday", "Weekday", final$week)
+final$week <- gsub("Thursday", "Weekday", final$week)
+final$week <- gsub("Friday", "Weekday", final$week)
+final$week <- gsub("Saturday", "Weekend", final$week)
+final$week <- gsub("Sunday", "Weekend", final$week)
+```
+
+
+
+```{r panels}
+qplot(interval, steps, data = final, facets = . ~ week, geom = "line")
+```
+
+As we can see there are some differences between weekdays and weekends. Though the maximum number of steps is about the same. The time interval when we begin to see an increase in number of steps is greater then weekdays, which tells us that the person tends to start moving later in the day than on weekdays. The peaks also happen later in the day. 
